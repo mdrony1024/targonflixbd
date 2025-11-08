@@ -3,74 +3,152 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>My VAST Ads Player (Vercel Test)</title>
+    <title>Google IMA SDK VAST Player (Vercel Test)</title>
+
+    <script type="text/javascript" src="//imasdk.googleapis.com/js/sdkloader/ima3.js"></script>
+
     <style>
         body { font-family: Arial, sans-serif; display: flex; justify-content: center; align-items: center; min-height: 100vh; background-color: #f0f0f0; margin: 0; flex-direction: column; }
-        .player-container { width: 80%; max-width: 640px; border: 1px solid #ccc; box-shadow: 2px 2px 8px rgba(0,0,0,0.1); margin-bottom: 20px; }
-        #my-video-player { width: 100%; height: auto; display: block; background-color: black; }
+        .video-container { 
+            position: relative; 
+            width: 80%; 
+            max-width: 640px; 
+            margin-bottom: 20px;
+            /* 16:9 Aspect Ratio */
+            padding-top: 56.25%; 
+        }
+        #content-video { 
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%; 
+            height: 100%;
+            background-color: black;
+            cursor: pointer; /* ক্লিক করে প্লে করার ইঙ্গিত */
+        }
+        #ad-container { 
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%; 
+            height: 100%;
+            z-index: 10;
+        }
         h1 { color: #333; }
-        .description { margin-top: 20px; text-align: center; color: #555; }
+        .instruction { margin-top: 10px; color: crimson; font-weight: bold; }
     </style>
 </head>
 <body>
 
-    <h1>My VAST Video Ad Player</h1>
-    <div class="player-container">
-        <video id="my-video-player" controls preload="auto" poster="https://via.placeholder.com/640x360?text=Video+Player">
-            <source src="https://test-videos.co.uk/vids/bigbuckbunny/mp4/720/big_buck_bunny_720p_1mb.mp4" type="video/mp4">
+    <h1>Google IMA Video Ad Player Test</h1>
+    <div class="video-container">
+        <video id="content-video" controls>
+            <source src="https://storage.googleapis.com/interactive-media-ads/media/mp4/ad.mp4" type="video/mp4">
             আপনার ব্রাউজার ভিডিও ট্যাগ সমর্থন করে না।
         </video>
-    </div>
-    <p class="description">
-        এই প্লেয়ারটি VAST অ্যাড কন্টেন্ট লোড করার চেষ্টা করবে।
-    </p>
 
-    <script src="https://unpkg.com/@glomex/vast-ima-player@latest/dist/glomex-vast-ima-player.min.js"></script>
+        <div id="ad-container"></div>
+    </div>
+    <p class="instruction">ভিডিওটি প্লে করতে ক্লিক করুন, এতেই বিজ্ঞাপন লোড হবে।</p>
 
     <script>
-        document.addEventListener('DOMContentLoaded', () => {
-            const videoElement = document.getElementById('my-video-player');
+        const AD_TAG_URL = 'https://pubads.g.doubleclick.net/gampad/ads?sz=640x480&iu=/124319096/external/single_ad_samples&ciu_szs=300x250&impl=s&gdfp_req=1&env=vp&output=vast&unviewed_position_start=1&cust_params=sample_ct%3Dlinear&correlator=';
 
-            // VAST Ad Tag URL (এখানে আপনার VAST Ad Tag লিঙ্কটি দিন)
-            // এটি Google-এর একটি স্যাম্পল VAST Tag
-            const vastAdTagUrl = 'https://pubads.g.doubleclick.net/gampad/ads?sz=640x480&iu=/124319096/external/single_ad_samples&ciu_szs=300x250&impl=s&gdfp_req=1&env=vp&output=vast&unviewed_position_start=1&cust_params=sample_ct%3Dlinear&correlator=';
+        function initIma() {
+            const videoElement = document.getElementById('content-video');
+            const adContainerElement = document.getElementById('ad-container');
 
-            // vast-ima-player ইনিশিয়ালাইজ করুন
-            if (window.GlomexVastImaPlayer) {
-                const player = new GlomexVastImaPlayer(videoElement, {
-                    adTagUrl: vastAdTagUrl,
-                    // অন্যান্য বিকল্প যোগ করতে পারেন, যেমন:
-                    // locale: 'en',
-                    // debug: true,
-                });
+            // ১. AdsLoader তৈরি করুন
+            let adsLoader = new google.ima.AdsLoader(adContainerElement);
+            adsLoader.addEventListener(
+                google.ima.AdsManagerLoadedEvent.Type.ADS_MANAGER_LOADED,
+                onAdsManagerLoaded,
+                false);
+            adsLoader.addEventListener(
+                google.ima.AdErrorEvent.Type.AD_ERROR,
+                onAdError,
+                false);
 
-                // প্লেয়ার লোড হওয়ার পর অ্যাড লোড করতে পারেন
-                videoElement.addEventListener('loadedmetadata', () => {
-                    console.log('Video metadata loaded. Attempting to load ads...');
-                    player.loadAds(); // অ্যাড লোড করার জন্য কল করুন
-                });
+            // ২. AdsRequest তৈরি করুন
+            let adsRequest = new google.ima.AdsRequest();
+            adsRequest.adTagUrl = AD_TAG_URL;
+            adsRequest.linearAdSlotWidth = 640;
+            adsRequest.linearAdSlotHeight = 400;
 
-                // বিভিন্ন ইভেন্ট হ্যান্ডেল করতে পারেন (ঐচ্ছিক)
-                player.on('adError', (error) => {
-                    console.error('Ad Error:', error);
-                    alert('বিজ্ঞাপন লোড হতে ব্যর্থ হয়েছে: ' + error.message);
-                });
+            // ৩. AdDisplayContainer তৈরি করুন
+            let adDisplayContainer = new google.ima.AdDisplayContainer(adContainerElement, videoElement);
+            adDisplayContainer.initialize();
 
-                player.on('adLoaded', () => {
-                    console.log('Ad loaded successfully.');
-                });
+            // ৪. ব্যবহারকারী যখন ভিডিওতে ক্লিক করবেন, তখন বিজ্ঞাপন লোড করুন
+            videoElement.addEventListener('click', requestAds, false);
+            videoElement.addEventListener('play', requestAds, false);
 
-                player.on('adStarted', () => {
-                    console.log('Ad started playing.');
-                });
+            function requestAds() {
+                // একবার বিজ্ঞাপন লোড করার পর ইভেন্ট লিসেনারগুলো সরিয়ে দিন
+                videoElement.removeEventListener('click', requestAds);
+                videoElement.removeEventListener('play', requestAds);
 
-                console.log('GlomexVastImaPlayer initialized.');
-
-            } else {
-                console.error('GlomexVastImaPlayer library not found.');
-                alert('বিজ্ঞাপন প্লেয়ার লাইব্রেরি লোড হয়নি।');
+                // শুধু তখনই বিজ্ঞাপন লোড করুন যখন ভিডিওটি থামানো থাকে (paused)
+                if (videoElement.paused) {
+                    // বিজ্ঞাপন লোড করার অনুরোধ
+                    adsLoader.requestAds(adsRequest);
+                } else {
+                    // যদি ভিডিও চলছে, তাহলে প্রথমে ভিডিওটি থামান, তারপর বিজ্ঞাপন লোড করার অনুরোধ জানান
+                    videoElement.pause();
+                    adsLoader.requestAds(adsRequest);
+                }
             }
-        });
+            
+            // ৫. AdsManager লোড হলে
+            function onAdsManagerLoaded(adsManagerLoadedEvent) {
+                const adsRenderingSettings = new google.ima.AdsRenderingSettings();
+                adsRenderingSettings.restoreCustomPlaybackStateOnAdBreakComplete = true;
+
+                // AdsManager তৈরি করুন
+                let adsManager = adsManagerLoadedEvent.getAdsManager(
+                    videoElement, adsRenderingSettings);
+
+                // AdsManager ইভেন্ট লিসেনার যোগ করুন
+                adsManager.addEventListener(
+                    google.ima.AdErrorEvent.Type.AD_ERROR,
+                    onAdError);
+                adsManager.addEventListener(
+                    google.ima.AdEvent.Type.CONTENT_PAUSE_REQUESTED,
+                    onContentPauseRequested);
+                adsManager.addEventListener(
+                    google.ima.AdEvent.Type.CONTENT_RESUME_REQUESTED,
+                    onContentResumeRequested);
+                
+                // ৬. বিজ্ঞাপন প্লে করা শুরু করুন
+                try {
+                    adsManager.init(640, 400, google.ima.ViewMode.NORMAL);
+                    adsManager.start();
+                } catch (adError) {
+                    console.error('AdsManager start failed:', adError);
+                    videoElement.play();
+                }
+            }
+
+            // ৭. এরর হ্যান্ডলিং
+            function onAdError(adErrorEvent) {
+                console.error('Ad Error:', adErrorEvent.getError());
+                alert('বিজ্ঞাপন লোড বা প্লে করতে ব্যর্থ: ' + adErrorEvent.getError().getMessage());
+                // বিজ্ঞাপনে সমস্যা হলে কন্টেন্ট ভিডিওটি প্লে করুন
+                videoElement.play(); 
+            }
+
+            // ৮. কন্টেন্ট পজ/রিজিউম
+            function onContentPauseRequested() {
+                videoElement.pause();
+            }
+
+            function onContentResumeRequested() {
+                videoElement.play();
+            }
+        }
+
+        // DOM লোড হওয়ার পর IMA ইনিশিয়ালাইজ করুন
+        window.addEventListener('load', initIma);
     </script>
 
 </body>
