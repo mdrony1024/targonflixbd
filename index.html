@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Google IMA SDK VAST Player (Final Fix)</title>
+    <title>Google IMA SDK VAST Player (Final)</title>
 
     <script type="text/javascript" src="//imasdk.googleapis.com/js/sdkloader/ima3.js"></script>
 
@@ -32,6 +32,8 @@
             width: 100%; 
             height: 100%;
             z-index: 10;
+            /* প্লে বাটন ব্লক হওয়া রোধ করার জন্য */
+            pointer-events: none;
         }
         h1 { color: #333; }
         .instruction { margin-top: 10px; color: green; font-weight: bold; }
@@ -48,15 +50,15 @@
 
         <div id="ad-container"></div>
     </div>
-    <p class="instruction">প্লে বাটন চাপুন। প্রথমে বিজ্ঞাপন দেখাবে, তারপর ভিডিও চালু হবে।</p>
+    <p class="instruction">প্লে বাটন চাপুন। প্রথমে বিজ্ঞাপন দেখাবে, তারপর ভিডিও অটো চালু হবে।</p>
 
     <script>
-        // Google-এর নমুনা VAST অ্যাড ট্যাগ URL, আপনি এখানে আপনার ট্যাগ ব্যবহার করতে পারেন
         const AD_TAG_URL = 'https://pubads.g.doubleclick.net/gampad/ads?sz=640x480&iu=/124319096/external/single_ad_samples&ciu_szs=300x250&impl=s&gdfp_req=1&env=vp&output=vast&unviewed_position_start=1&cust_params=sample_ct%3Dlinear&correlator=';
         let adsRequested = false; 
+        let videoElement;
 
         function initIma() {
-            const videoElement = document.getElementById('content-video');
+            videoElement = document.getElementById('content-video');
             const adContainerElement = document.getElementById('ad-container');
 
             let adsLoader = new google.ima.AdsLoader(adContainerElement);
@@ -71,14 +73,12 @@
 
             let adsRequest = new google.ima.AdsRequest();
             adsRequest.adTagUrl = AD_TAG_URL;
-            // এটি ব্রাউজারকে বোঝায় যে ভিডিও শুরু হতে চলেছে, তাই প্লে ইভেন্টে অ্যাড লোড করতে হবে
             adsRequest.setAdWillAutoPlay(false); 
 
             let adDisplayContainer = new google.ima.AdDisplayContainer(adContainerElement, videoElement);
             adDisplayContainer.initialize();
             
-            // **ফিক্স: প্লে বাটন ইভেন্ট লিসেনার**
-            // এটি নিশ্চিত করে যে ব্যবহারকারী যখনই প্লে বাটন চাপবে, বিজ্ঞাপন অনুরোধ হবে।
+            // ফিক্স: প্লে বাটন ইভেন্ট লিসেনার, একবারই অ্যাড অনুরোধ করবে
             videoElement.addEventListener('play', requestAdsOnce, { once: true });
             videoElement.addEventListener('click', requestAdsOnce, { once: true });
 
@@ -88,9 +88,12 @@
                 console.log('Ad request initiated...');
                 adsRequested = true;
 
-                // প্লেয়ারটিকে থামিয়ে IMA SDK-কে দায়িত্ব দিন
+                // IMA SDK-এর জন্য কন্টেন্ট পজ করুন এবং অ্যাড লোড করুন
                 videoElement.pause(); 
                 
+                // #ad-container কে দৃশ্যমান করুন এবং টাচ ইভেন্টের জন্য তৈরি করুন
+                adContainerElement.style.pointerEvents = 'auto';
+
                 adsLoader.requestAds(adsRequest);
             }
 
@@ -112,7 +115,6 @@
                     onContentResumeRequested);
                 
                 try {
-                    // প্রথম দুটি প্যারামিটার অবশ্যই ভিডিও প্লেয়ারের সাইজ হতে হবে
                     adsManager.init(videoElement.clientWidth, videoElement.clientHeight, google.ima.ViewMode.NORMAL);
                     adsManager.start();
                 } catch (adError) {
@@ -120,24 +122,45 @@
                     videoElement.play(); 
                 }
             }
-
+            
+            // --- Error Popup ফিক্স ---
             function onAdError(adErrorEvent) {
+                const errorMessage = adErrorEvent.getError().getMessage();
+                
                 console.error('Ad Error:', adErrorEvent.getError());
                 adsRequested = false;
+
+                // বিজ্ঞাপনের ত্রুটি বার্তা দেখান
+                alert('বিজ্ঞাপন ত্রুটি! অ্যাড লোড হয়নি। ত্রুটি: ' + errorMessage);
+                
+                // #ad-container কে আবার টাচ-মুক্ত করুন
+                adContainerElement.style.pointerEvents = 'none';
+
                 // বিজ্ঞাপনে সমস্যা হলে কন্টেন্ট ভিডিও প্লে করুন
-                videoElement.play(); 
+                videoElement.play().catch(error => {
+                    console.warn("Content play failed after ad error:", error);
+                }); 
             }
 
             function onContentPauseRequested() {
                 // IMA SDK এখন ভিডিও পজ করবে
+                videoElement.pause();
             }
 
+            // --- অটো প্লে ফিক্স ---
             function onContentResumeRequested() {
                 // IMA SDK এখন ভিডিও প্লে করবে
+                adContainerElement.style.pointerEvents = 'none'; // বিজ্ঞাপন শেষ, কন্টেইনার টাচ-মুক্ত
+                videoElement.play().then(() => {
+                    console.log('Content resumed successfully after ad.');
+                }).catch(error => {
+                    console.error('Autoplay failed, user interaction needed to resume content:', error);
+                    // অটো প্লে ব্যর্থ হলে কন্টেন্ট ভিডিওর উপর একটি স্পষ্ট নির্দেশনা দিন।
+                    alert('বিজ্ঞাপন শেষ। ভিডিও চালু করতে আবার প্লে বাটন চাপুন।');
+                });
             }
         }
 
-        // DOM লোড হওয়ার পর IMA ইনিশিয়ালাইজ করুন
         window.addEventListener('load', initIma);
     </script>
 
